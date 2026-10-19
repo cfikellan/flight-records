@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17324d">
+<title>Flight Records</title>
+<style>
+:root{color-scheme:light;--navy:#17324d;--blue:#245b83;--bg:#f4f7fa;--line:#dce4ec;--muted:#64748b;--white:#fff;--green:#1e6b4e;--red:#a33a35}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#172435;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:var(--navy);color:white;padding:18px max(16px,env(safe-area-inset-left));position:sticky;top:0;z-index:2}
+.header-inner{max-width:900px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:22px;margin:0}header p{margin:2px 0 0;color:#d7e5f0;font-size:13px}
+main{max-width:900px;margin:20px auto;padding:0 14px 48px}
+.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:0 2px 8px #17324d0a}
+h2{font-size:18px;margin:0 0 12px}h3{font-size:16px;margin:0}
+button,.button{font:inherit;border:0;border-radius:10px;padding:11px 14px;background:var(--blue);color:white;cursor:pointer;font-weight:650;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+button.secondary,.button.secondary{background:#eaf0f5;color:var(--navy)}button.danger{background:#fbeceb;color:var(--red)}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.spread{justify-content:space-between}
+label{display:block;font-size:13px;color:#40536a;font-weight:650;margin:12px 0 5px}
+input,textarea,select{width:100%;font:inherit;padding:11px 12px;border:1px solid #cbd6e1;border-radius:10px;background:#fff;color:#172435}
+textarea{min-height:88px;resize:vertical}.field{flex:1;min-width:180px}
+.search{margin-bottom:12px}
+.student-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.student-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff;text-align:left;color:inherit;display:block;width:100%;font-weight:400}
+.student-card strong{display:block;font-size:17px;color:var(--navy)}.student-card small{color:var(--muted)}
+.muted{color:var(--muted);font-size:13px}.empty{padding:24px 12px;text-align:center;color:var(--muted)}
+.hidden{display:none!important}.notice{background:#edf5fb;border:1px solid #cfe0ee;border-radius:12px;padding:12px;font-size:13px;margin-bottom:14px}
+.warning{background:#fff7e8;border-color:#f0d6a2}.status{font-size:13px;margin-top:10px;color:var(--green);min-height:18px}
+.lesson{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px}
+.lesson img{width:100%;max-height:360px;object-fit:contain;background:#f0f3f6;border-radius:8px;margin-top:10px}
+.lesson-meta{font-size:13px;color:var(--muted);margin:3px 0 8px}
+.back{margin-bottom:12px}.divider{height:1px;background:var(--line);margin:16px 0}
+footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font-size:12px}
+@media(min-width:700px){main{padding-left:20px;padding-right:20px}.panel{padding:20px}}
+</style>
+</head>
+<body>
+<header><div class="header-inner"><div><h1>✈ Flight Records</h1><p>Student progress sheets & lesson history</p></div><button id="homeBtn" class="secondary hidden">All students</button></div></header>
+<main>
+<div class="notice warning"><strong>Local storage:</strong> records stay in this browser on this device. They are not automatically synced or backed up. Export a backup regularly and save a copy somewhere else.</div>
+<section id="homeView">
+  <div class="panel">
+    <div class="row spread"><h2>Students</h2><button id="showAddStudent">＋ Add student</button></div>
+    <input class="search" id="studentSearch" placeholder="Search students…" autocomplete="off">
+    <div id="studentList" class="student-list"></div>
+    <div id="noStudents" class="empty hidden">No students yet. Add a student to get started.</div>
+  </div>
+  <div class="panel">
+    <h2>Backup & restore</h2>
+    <p class="muted">A backup contains student details, lesson notes, and attached progress-sheet photos. Keep the backup file private because it may contain student information.</p>
+    <div class="row">
+      <button id="exportBtn">Export all records</button>
+      <label class="button secondary" for="importFile" style="margin:0">Restore from backup</label>
+      <input id="importFile" type="file" accept=".json,application/json" class="hidden">
+    </div>
+    <div id="backupStatus" class="status" role="status"></div>
+    <div class="divider"></div>
+    <h3>Free backup routine</h3>
+    <p class="muted">After exporting, save the JSON file to the iPhone Files app, then AirDrop or copy it to your Mac or an external drive. Keep more than one dated backup when possible.</p>
+  </div>
+  <div id="addStudentPanel" class="panel hidden">
+    <h2>Add student</h2>
+    <form id="studentForm">
+      <label for="studentName">Student name *</label><input id="studentName" required maxlength="120" autocomplete="name" placeholder="e.g. Alex Morgan">
+      <label for="studentNotes">Optional notes</label><textarea id="studentNotes" placeholder="Training goals, useful context…"></textarea>
+      <div class="row" style="margin-top:14px"><button type="submit">Save student</button><button type="button" id="cancelAddStudent" class="secondary">Cancel</button></div>
+    </form>
+  </div>
+</section>
+<section id="studentView" class="hidden">
+  <button id="backBtn" class="secondary back">← All students</button>
+  <div class="panel">
+    <div class="row spread"><div><h2 id="detailName"></h2><div id="detailCount" class="muted"></div></div><button id="editStudentBtn" class="secondary">Edit details</button></div>
+    <p id="detailNotes" style="white-space:pre-wrap"></p>
+    <div id="editStudentPanel" class="hidden">
+      <form id="editStudentForm">
+        <label for="editName">Student name *</label><input id="editName" required maxlength="120">
+        <label for="editNotes">Notes</label><textarea id="editNotes"></textarea>
+        <div class="row" style="margin-top:12px"><button type="submit">Save changes</button><button type="button" id="cancelEditStudent" class="secondary">Cancel</button><button type="button" id="deleteStudentBtn" class="danger">Delete student</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Add lesson record</h2>
+    <form id="lessonForm">
+      <div class="row">
+        <div class="field"><label for="lessonDate">Date *</label><input type="date" id="lessonDate" required></div>
+        <div class="field"><label for="lessonTitle">Lesson / topic</label><input id="lessonTitle" maxlength="160" placeholder="e.g. Slow flight and stalls"></div>
+      </div>
+      <label for="lessonNotes">Debrief notes (optional)</label><textarea id="lessonNotes" placeholder="Progress, strengths, areas to improve, next lesson…"></textarea>
+      <label for="lessonPhoto">Progress sheet photo(s)</label><input id="lessonPhoto" type="file" accept="image/*" capture="environment" multiple>
+      <p class="muted">Use the camera option or choose existing photos. Images are stored in this browser and included in exported backups.</p>
+      <div class="row" style="margin-top:14px"><button type="submit" id="saveLessonBtn">Save lesson</button></div>
+    </form>
+    <div id="lessonStatus" class="status" role="status"></div>
+  </div>
+  <div class="panel"><div class="row spread"><h2>Lesson history</h2><input id="lessonSearch" style="max-width:240px" placeholder="Search this student's records"></div><div id="lessonList"></div><div id="noLessons" class="empty hidden">No lessons recorded yet.</div></div>
+</section>
+</main>
+<footer>Flight Records • Local-first prototype • Export backups regularly</footer>
+<script>
+(() => {
+'use strict';
+const DB_NAME='flight-records-local-v1', DB_VERSION=1, STORE='records';
+let db, activeStudentId=null, studentsCache=[];
+const $=id=>document.getElementById(id);
+const uid=()=>Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate=s=>{if(!s)return '';const d=new Date(s+'T12:00:00');return d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});};
+function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE,{keyPath:'id'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+function getAll(){return new Promise((resolve,reject)=>{const r=db.transaction(STORE,'readonly').objectStore(STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});}
+function put(record){return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(record);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});}
+function remove(id){return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});}
+function replaceAll(records){return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite'),s=tx.objectStore(STORE);s.clear();records.forEach(r=>s.put(r));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}
+async function refresh(){studentsCache=(await getAll()).filter(r=>r.type==='student').sort((a,b)=>a.name.localeCompare(b.name));renderStudents();if(activeStudentId)await renderStudent();}
+function renderStudents(){const q=$('studentSearch').value.trim().toLowerCase();const items=studentsCache.filter(s=>(s.name+' '+(s.notes||'')).toLowerCase().includes(q));$('studentList').innerHTML=items.map(s=>`<button class="student-card" data-student="${esc(s.id)}"><strong>${esc(s.name)}</strong><small>${(s.lessons||[]).length} lesson record${(s.lessons||[]).length===1?'':'s'}</small></button>`).join('');$('noStudents').classList.toggle('hidden',studentsCache.length!==0);$('studentList').querySelectorAll('[data-student]').forEach(b=>b.addEventListener('click',()=>openStudent(b.dataset.student)));}
+function showHome(){activeStudentId=null;$('homeView').classList.remove('hidden');$('studentView').classList.add('hidden');$('homeBtn').classList.add('hidden');}
+async function openStudent(id){activeStudentId=id;$('homeView').classList.add('hidden');$('studentView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');$('editStudentPanel').classList.add('hidden');$('lessonSearch').value='';$('lessonForm').reset();$('lessonDate').value=new Date().toISOString().slice(0,10);$('lessonStatus').textContent='';await renderStudent();window.scrollTo(0,0);}
+async function renderStudent(){const s=(await getAll()).find(r=>r.id===activeStudentId&&r.type==='student');if(!s){showHome();return;}const lessons=(s.lessons||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.createdAt||0)-(a.createdAt||0));$('detailName').textContent=s.name;$('detailCount').textContent=`${lessons.length} lesson record${lessons.length===1?'':'s'}`;$('detailNotes').textContent=s.notes||'';$('editName').value=s.name;$('editNotes').value=s.notes||'';const q=$('lessonSearch').value.trim().toLowerCase();const filtered=lessons.filter(l=>([l.date,l.title,l.notes].join(' ')).toLowerCase().includes(q));$('lessonList').innerHTML=filtered.map(l=>`<article class="lesson"><div class="row spread"><h3>${esc(l.title||'Lesson record')}</h3><button class="danger" data-delete-lesson="${esc(l.id)}">Delete</button></div><div class="lesson-meta">${esc(fmtDate(l.date))}</div>${l.notes?`<p style="white-space:pre-wrap">${esc(l.notes)}</p>`:''}${(l.photos||[]).map(p=>`<img alt="Progress sheet photo" src="${esc(p.dataUrl)}">`).join('')}<div class="muted">${(l.photos||[]).length} photo${(l.photos||[]).length===1?'':'s'}</div></article>`).join('');$('noLessons').classList.toggle('hidden',lessons.length!==0);$('lessonList').querySelectorAll('[data-delete-lesson]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Delete this lesson record and its photos?'))return;const all=await getAll(),st=all.find(r=>r.id===activeStudentId);st.lessons=(st.lessons||[]).filter(l=>l.id!==b.dataset.deleteLesson);await put(st);await refresh();}));}
+function dataUrl(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(file);});}
+$('showAddStudent').onclick=()=>$('addStudentPanel').classList.remove('hidden');
+$('cancelAddStudent').onclick=()=>{$('addStudentPanel').classList.add('hidden');$('studentForm').reset();};
+$('studentForm').onsubmit=async e=>{e.preventDefault();const name=$('studentName').value.trim();if(!name)return;await put({id:uid(),type:'student',name,notes:$('studentNotes').value.trim(),lessons:[],createdAt:Date.now()});$('studentForm').reset();$('addStudentPanel').classList.add('hidden');await refresh();};
+$('studentSearch').oninput=renderStudents;
+$('backBtn').onclick=showHome;$('homeBtn').onclick=showHome;
+$('editStudentBtn').onclick=()=>$('editStudentPanel').classList.toggle('hidden');
+$('cancelEditStudent').onclick=()=>$('editStudentPanel').classList.add('hidden');
+$('editStudentForm').onsubmit=async e=>{e.preventDefault();const all=await getAll(),s=all.find(r=>r.id===activeStudentId);if(!s)return;s.name=$('editName').value.trim();s.notes=$('editNotes').value.trim();await put(s);$('editStudentPanel').classList.add('hidden');await refresh();};
+$('deleteStudentBtn').onclick=async()=>{if(!confirm('Delete this student and ALL their lesson records and photos? This cannot be undone unless you have a backup.'))return;await remove(activeStudentId);showHome();await refresh();};
+$('lessonSearch').oninput=renderStudent;
+$('lessonForm').onsubmit=async e=>{e.preventDefault();const btn=$('saveLessonBtn');btn.disabled=true;$('lessonStatus').textContent='Saving…';try{const all=await getAll(),s=all.find(r=>r.id===activeStudentId);if(!s)throw Error('Student not found');const files=[...$('lessonPhoto').files];const photos=[];for(const f of files){if(!f.type.startsWith('image/'))continue;photos.push({name:f.name||'progress-sheet',type:f.type,dataUrl:await dataUrl(f)});}const lesson={id:uid(),date:$('lessonDate').value,title:$('lessonTitle').value.trim(),notes:$('lessonNotes').value.trim(),photos,createdAt:Date.now()};s.lessons=s.lessons||[];s.lessons.push(lesson);await put(s);$('lessonForm').reset();$('lessonDate').value=new Date().toISOString().slice(0,10);$('lessonStatus').textContent='Lesson saved on this device.';await refresh();}catch(err){console.error(err);$('lessonStatus').textContent='Could not save. Try fewer/smaller photos, then export a backup.';}finally{btn.disabled=false;}};
+$('exportBtn').onclick=async()=>{const b=$('exportBtn');b.disabled=true;$('backupStatus').textContent='Preparing backup…';try{const records=await getAll();const payload={format:'flight-records-backup',version:1,exportedAt:new Date().toISOString(),records};const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='flight-records-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);$('backupStatus').textContent=`Backup prepared (${records.length} records). Save the downloaded file somewhere outside this app.`;}catch(err){console.error(err);$('backupStatus').textContent='Backup failed. Check available device storage and try again.';}finally{b.disabled=false;}};
+$('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(!confirm('Restore replaces the records currently in this app with the backup file. Export a backup of current records first. Continue?')){e.target.value='';return;}try{const payload=JSON.parse(await file.text());if(payload.format!=='flight-records-backup'||!Array.isArray(payload.records))throw Error('Not a valid Flight Records backup');if(!payload.records.every(r=>r&&typeof r.id==='string'&&(r.type==='student')))throw Error('Backup contents are not valid');await replaceAll(payload.records);activeStudentId=null;showHome();await refresh();$('backupStatus').textContent=`Restored ${payload.records.length} student record(s).`; }catch(err){alert('Could not restore this backup: '+err.message);}finally{e.target.value='';}};
+(async()=>{try{db=await openDB();await refresh();}catch(err){console.error(err);alert('This browser could not open local storage for Flight Records. Try opening it in Safari or Chrome with site storage enabled.');}})();
+})();
+</script>
+</body>
+</html>
