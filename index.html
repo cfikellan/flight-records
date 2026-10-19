@@ -86,7 +86,7 @@ footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font
           <button id="restoreShortcutBtn">↓ Restore Saved Backup</button>
         </div>
         <div id="shortcutRestorePanel" class="hidden" style="margin-top:12px">
-          <p class="muted">After the shortcut copies the backup, return here and tap the button below. iOS may ask you to allow pasting. This will replace your current records after confirmation.</p>
+          <p class="muted">After the shortcut copies the backup, return here. The app will try to restore automatically. If iOS blocks clipboard access, tap the button below. This will replace your current records after confirmation.</p>
           <button id="pasteRestoreBtn" class="secondary">Paste &amp; Restore Backup</button>
           <p class="muted">If clipboard access is blocked, use Restore Different File instead.</p>
         </div>
@@ -104,7 +104,7 @@ footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font
     <div id="backupStatus" class="status" role="status"></div>
     <div class="divider"></div>
     <h3>How it works</h3>
-    <p class="muted">Save Backup opens the Share Sheet: choose “Save Flight Records Backup.” Restore Saved Backup launches a separate shortcut named “Restore Flight Records,” which must be configured to copy your backup JSON to the clipboard. Return to this app and tap Paste &amp; Restore Backup. You can always restore a different file manually. Keep a separate recovery copy when possible.</p>
+    <p class="muted">Save Backup opens the Share Sheet: choose “Save Flight Records Backup.” Restore Saved Backup launches a separate shortcut named “Restore Flight Records,” which must be configured to copy your backup JSON to the clipboard. Return to this app; it will attempt restoration automatically. If iOS blocks it, tap Paste &amp; Restore Backup. You can always restore a different file manually. Keep a separate recovery copy when possible.</p>
   </div>
   <div id="addStudentPanel" class="panel hidden">
     <h2>Add student</h2>
@@ -347,18 +347,39 @@ async function restoreBackupText(raw){
   $('backupStatus').textContent=`Restored ${payload.records.length} student record(s).`;
   return true;
 }
+let shortcutRestorePending=false, shortcutRestoreReading=false;
 $('restoreShortcutBtn').onclick=()=>{
+  shortcutRestorePending=true;
   $('shortcutRestorePanel').classList.remove('hidden');
-  $('backupStatus').textContent='Opening Restore Flight Records in Shortcuts. Once it copies the backup, return here and tap Paste & Restore Backup.';
+  $('backupStatus').textContent='Opening Restore Flight Records in Shortcuts. Return here after it copies the backup. The app will try to restore automatically; if blocked, tap Paste & Restore Backup.';
   window.location.href='shortcuts://run-shortcut?name='+encodeURIComponent('Restore Flight Records');
 };
-$('pasteRestoreBtn').onclick=async()=>{
+async function tryClipboardRestore(automatic=false){
+  if(shortcutRestoreReading)return;
+  shortcutRestoreReading=true;
   try{
-    if(!navigator.clipboard||!navigator.clipboard.readText)throw Error('Clipboard reading is unavailable in this web app');
+    if(!navigator.clipboard?.readText)throw Error('Clipboard access is unavailable');
     const raw=await navigator.clipboard.readText();
-    await restoreBackupText(raw);
-  }catch(err){console.error(err);$('backupStatus').textContent='Could not read or restore the clipboard backup: '+err.message+'. You can use Restore Different File instead.';}
-};
+    if(!raw.trim())throw Error('Clipboard is empty');
+    const restored=await restoreBackupText(raw);
+    if(restored){shortcutRestorePending=false;$('shortcutRestorePanel').classList.add('hidden');}
+    else if(automatic){$('backupStatus').textContent='Restore cancelled. Use Paste & Restore Backup if you want to try again.';}
+  }catch(err){
+    console.error('Clipboard restore:',err);
+    $('shortcutRestorePanel').classList.remove('hidden');
+    $('backupStatus').textContent=(automatic?'Automatic clipboard access was blocked. Tap Paste & Restore Backup to finish. ':'Could not read or restore clipboard: ')+err.message;
+  }finally{shortcutRestoreReading=false;}
+}
+$('pasteRestoreBtn').onclick=()=>tryClipboardRestore(false);
+// Only attempt a clipboard read after this app explicitly launched the restore shortcut.
+// iOS may require a user gesture; the manual button remains available.
+function attemptRestoreOnReturn(){
+  if(!shortcutRestorePending||document.hidden||shortcutRestoreReading)return;
+  // Allow iOS a moment to bring the installed web app back into the foreground.
+  setTimeout(()=>{if(shortcutRestorePending&&!document.hidden)tryClipboardRestore(true);},350);
+}
+document.addEventListener('visibilitychange',attemptRestoreOnReturn);
+window.addEventListener('focus',attemptRestoreOnReturn);
 $('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(!confirm('Restore replaces the records currently in this app with the backup file. Export a backup of current records first. Continue?')){e.target.value='';return;}try{const payload=JSON.parse(await file.text());if(payload.format!=='flight-records-backup'||!Array.isArray(payload.records))throw Error('Not a valid Flight Records backup');if(!payload.records.every(r=>r&&typeof r.id==='string'&&(r.type==='student')))throw Error('Backup contents are not valid');await replaceAll(payload.records);activeStudentId=null;showHome();await refresh();$('backupStatus').textContent=`Restored ${payload.records.length} student record(s).`; }catch(err){alert('Could not restore this backup: '+err.message);}finally{e.target.value='';}};
 (async()=>{try{db=await openDB();await refresh();}catch(err){console.error(err);alert('This browser could not open local storage for Flight Records. Try opening it in Safari or Chrome with site storage enabled.');}})();
 })();
