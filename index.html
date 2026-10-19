@@ -49,6 +49,8 @@ textarea{min-height:88px;resize:vertical}.field{flex:1;min-width:180px}
 .flight-choice input:checked+span{border-color:#2869a1;background:#e7f1fb;color:#195782}
 .ground-choice input:checked+span{border-color:#25805c;background:#e6f5ed;color:#176342}
 .type-option input:focus-visible+span{outline:3px solid #d99a25;outline-offset:2px}
+.lesson-edit-form{margin:12px 0;padding:12px;background:#f3f7fb;border:1px solid var(--line);border-radius:10px}
+.lesson-edit-form label{margin-top:8px}
 .lesson img{width:100%;max-height:360px;object-fit:contain;background:#f0f3f6;border-radius:8px;margin-top:10px}
 .photo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:10px 0}
 .photo-item{border:1px solid var(--line);border-radius:10px;padding:7px;min-width:0;background:#fafcfe}
@@ -56,7 +58,7 @@ textarea{min-height:88px;resize:vertical}.field{flex:1;min-width:180px}
 .photo-item .danger{width:100%;margin-top:6px;font-size:13px;padding:8px}
 .photo-item small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 .lesson-meta{font-size:13px;color:var(--muted);margin:3px 0 8px}
-.back{margin-bottom:12px}.divider{height:1px;background:var(--line);margin:16px 0}
+.confirm-overlay{position:fixed;inset:0;background:#0009;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}.confirm-box{background:white;width:100%;max-width:420px;border-radius:16px;padding:22px;box-shadow:0 12px 40px #0003}.confirm-box p{margin:0 0 20px}.back{margin-bottom:12px}.divider{height:1px;background:var(--line);margin:16px 0}
 footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font-size:12px}
 @media(min-width:700px){main{padding-left:20px;padding-right:20px}.panel{padding:20px}}
 </style>
@@ -76,14 +78,15 @@ footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font
     <h2>Backup & restore</h2>
     <p class="muted">A backup contains student details, lesson notes, and attached progress-sheet photos. Keep the backup file private because it may contain student information.</p>
     <div class="row">
-      <button id="exportBtn">Export all records</button>
+      <button id="shareBackupBtn">Save Backup to Files</button>
+      <button id="exportBtn" class="secondary">Export all records</button>
       <label class="button secondary" for="importFile" style="margin:0">Restore from backup</label>
       <input id="importFile" type="file" accept=".json,application/json" class="hidden">
     </div>
     <div id="backupStatus" class="status" role="status"></div>
     <div class="divider"></div>
     <h3>Free backup routine</h3>
-    <p class="muted">After exporting, save the JSON file to the iPhone Files app, then AirDrop or copy it to your Mac or an external drive. Keep more than one dated backup when possible.</p>
+    <p class="muted">Tap Save Backup to Files, then choose your “Save Flight Records Backup” Shortcut in the Share Sheet. The Shortcut replaces the existing backup file. If sharing is unavailable, use Export all records. Keep a separate recovery copy when possible.</p>
   </div>
   <div id="addStudentPanel" class="panel hidden">
     <h2>Add student</h2>
@@ -133,6 +136,14 @@ footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font
   <div class="panel"><div class="row spread"><h2>Lesson history</h2><input id="lessonSearch" style="max-width:240px" placeholder="Search this student's records"></div><div id="lessonList"></div><div id="noLessons" class="empty hidden">No lessons recorded yet.</div></div>
 </section>
 </main>
+<div id="deleteLessonDialog" class="confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="deleteLessonHeading">
+  <div class="confirm-box">
+    <h2 id="deleteLessonHeading">Delete this record?</h2>
+    <p>This permanently deletes the lesson and its photos from the app. You can recover it only from an older backup.</p>
+    <div class="row" style="justify-content:flex-end"><button type="button" id="cancelDeleteLesson" class="secondary">Cancel</button><button type="button" id="confirmDeleteLesson" class="danger">Delete</button></div>
+  </div>
+</div>
+
 <footer>Flight Records • Local-first prototype • Export backups regularly</footer>
 <script>
 (() => {
@@ -166,14 +177,33 @@ async function renderStudent(){
     const type=l.lessonType==='flight'?'flight':l.lessonType==='ground'?'ground':'uncategorized';
     const typeLabel=type==='flight'?'✈ Flight':type==='ground'?'▤ Ground':'Uncategorized';
     const photos=l.photos||[];
-    return `<article class="lesson ${type}"><span class="lesson-badge ${type}">${typeLabel}</span><div class="row spread"><h3>${esc(l.title||'Lesson record')}</h3><button class="danger" data-delete-lesson="${esc(l.id)}">Delete</button></div><div class="lesson-meta">${esc(fmtDate(l.date))}</div>${l.notes?`<p style="white-space:pre-wrap">${esc(l.notes)}</p>`:''}<div class="photo-grid">${photos.map((p,i)=>`<div class="photo-item"><img alt="Progress sheet photo ${i+1}" src="${esc(p.dataUrl)}"><small>${esc(p.name||'Photo '+(i+1))}</small><button type="button" class="danger" data-delete-photo="${esc(l.id)}" data-photo-index="${i}" aria-label="Delete photo ${i+1}">Delete photo</button></div>`).join('')}</div><div class="muted">${photos.length} photo${photos.length===1?'':'s'}</div></article>`;
+    return `<article class="lesson ${type}"><span class="lesson-badge ${type}">${typeLabel}</span><div class="row spread"><h3>${esc(l.title||'Lesson record')}</h3><div class="row"><button type="button" class="secondary" data-edit-lesson="${esc(l.id)}">Edit</button><button type="button" class="danger" data-delete-lesson="${esc(l.id)}">Delete</button></div></div><form class="lesson-edit-form hidden" data-edit-form="${esc(l.id)}"><label>Lesson date<input type="date" name="editDate" required value="${esc(l.date||'')}"></label><fieldset class="type-fieldset"><legend>Record type *</legend><div class="type-options"><label class="type-option flight-choice"><input type="radio" name="editType" value="flight" required ${type==='flight'?'checked':''}><span>✈ Flight</span></label><label class="type-option ground-choice"><input type="radio" name="editType" value="ground" required ${type==='ground'?'checked':''}><span>▤ Ground</span></label></div></fieldset><label>Lesson title<input name="editTitle" maxlength="160" value="${esc(l.title||'')}"></label><label>Debrief notes<textarea name="editLessonNotes">${esc(l.notes||'')}</textarea></label><div class="row"><button type="submit">Save changes</button><button type="button" class="secondary" data-cancel-edit>Cancel</button></div></form><div class="lesson-meta">${esc(fmtDate(l.date))}</div>${l.notes?`<p style="white-space:pre-wrap">${esc(l.notes)}</p>`:''}<div class="photo-grid">${photos.map((p,i)=>`<div class="photo-item"><img alt="Progress sheet photo ${i+1}" src="${esc(p.dataUrl)}"><small>${esc(p.name||'Photo '+(i+1))}</small><button type="button" class="danger" data-delete-photo="${esc(l.id)}" data-photo-index="${i}" aria-label="Delete photo ${i+1}">Delete photo</button></div>`).join('')}</div><div class="muted">${photos.length} photo${photos.length===1?'':'s'}</div></article>`;
   }).join('');
   $('noLessons').classList.toggle('hidden',lessons.length!==0);
-  $('lessonList').querySelectorAll('[data-delete-lesson]').forEach(b=>b.addEventListener('click',async()=>{
-    if(!confirm('Delete this lesson record and its photos?'))return;
-    const all=await getAll(),st=all.find(r=>r.id===activeStudentId);
-    st.lessons=(st.lessons||[]).filter(l=>l.id!==b.dataset.deleteLesson);
-    await put(st);await refresh();
+  $('lessonList').querySelectorAll('[data-edit-lesson]').forEach(b=>b.addEventListener('click',()=>{
+    const form=[...$('lessonList').querySelectorAll('[data-edit-form]')].find(f=>f.dataset.editForm===b.dataset.editLesson);
+    if(form){form.classList.toggle('hidden');if(!form.classList.contains('hidden'))form.elements.editTitle.focus();}
+  }));
+  $('lessonList').querySelectorAll('[data-cancel-edit]').forEach(b=>b.addEventListener('click',()=>{
+    b.closest('form').classList.add('hidden');
+  }));
+  $('lessonList').querySelectorAll('[data-edit-form]').forEach(form=>form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const saveBtn=form.querySelector('[type="submit"]');saveBtn.disabled=true;
+    try{
+      const all=await getAll(),st=all.find(r=>r.id===activeStudentId);
+      if(!st)throw Error('Student not found');
+      const lesson=(st.lessons||[]).find(l=>l.id===form.dataset.editForm);
+      if(!lesson)throw Error('Lesson not found');
+      const editType=form.querySelector('input[name="editType"]:checked');
+      if(!editType || !form.elements.editDate.value)throw Error('Date and record type are required');
+      lesson.date=form.elements.editDate.value;
+      lesson.lessonType=editType.value;
+      lesson.title=form.elements.editTitle.value.trim();
+      lesson.notes=form.elements.editLessonNotes.value.trim();
+      await put(st);
+      await refresh();
+    }catch(err){console.error(err);alert('Could not save lesson changes. Please try again.');saveBtn.disabled=false;}
   }));
   $('lessonList').querySelectorAll('[data-delete-photo]').forEach(b=>b.addEventListener('click',async()=>{
     if(!confirm('Delete only this photo from the lesson? This cannot be undone unless you have an older backup.'))return;
@@ -215,6 +245,43 @@ $('editStudentBtn').onclick=()=>$('editStudentPanel').classList.toggle('hidden')
 $('cancelEditStudent').onclick=()=>$('editStudentPanel').classList.add('hidden');
 $('editStudentForm').onsubmit=async e=>{e.preventDefault();const all=await getAll(),s=all.find(r=>r.id===activeStudentId);if(!s)return;s.name=$('editName').value.trim();s.notes=$('editNotes').value.trim();await put(s);$('editStudentPanel').classList.add('hidden');await refresh();};
 $('deleteStudentBtn').onclick=async()=>{if(!confirm('Delete this student and ALL their lesson records and photos? This cannot be undone unless you have a backup.'))return;await remove(activeStudentId);showHome();await refresh();};
+// Delegated handler survives lesson-list re-renders. Custom confirmation works in
+// installed web apps and preview environments where window.confirm may be blocked.
+let pendingDelete=null;
+function closeDeleteDialog(){
+  $('deleteLessonDialog').classList.add('hidden');
+  pendingDelete=null;
+}
+$('cancelDeleteLesson').addEventListener('click',closeDeleteDialog);
+$('deleteLessonDialog').addEventListener('click',e=>{if(e.target===$('deleteLessonDialog'))closeDeleteDialog();});
+$('lessonList').addEventListener('click',e=>{
+  const button=e.target.closest('[data-delete-lesson]');
+  if(!button)return;
+  e.preventDefault();
+  pendingDelete={studentId:activeStudentId,lessonId:button.dataset.deleteLesson};
+  $('deleteLessonDialog').classList.remove('hidden');
+  $('cancelDeleteLesson').focus();
+});
+$('confirmDeleteLesson').addEventListener('click',async()=>{
+  if(!pendingDelete)return;
+  const {studentId,lessonId}=pendingDelete;
+  const button=$('confirmDeleteLesson');
+  button.disabled=true;
+  try{
+    const records=await getAll();
+    const student=records.find(r=>r.id===studentId&&r.type==='student');
+    if(!student)throw new Error('Student not found');
+    const previous=(student.lessons||[]).length;
+    student.lessons=(student.lessons||[]).filter(l=>l.id!==lessonId);
+    if(student.lessons.length===previous)throw new Error('Lesson not found');
+    await put(student);
+    closeDeleteDialog();
+    await refresh();
+  }catch(err){
+    console.error('Delete lesson failed:',err);
+    alert('Could not delete the record. Please try again.');
+  }finally{button.disabled=false;}
+});
 $('lessonSearch').oninput=renderStudent;
 $('lessonForm').onsubmit=async e=>{
   e.preventDefault();const btn=$('saveLessonBtn');btn.disabled=true;$('lessonStatus').textContent='Saving…';
@@ -230,6 +297,27 @@ $('lessonForm').onsubmit=async e=>{
     $('lessonStatus').textContent='Lesson saved on this device.';await refresh();
   }catch(err){console.error(err);$('lessonStatus').textContent='Could not save. Check available storage or try fewer/smaller photos.';}
   finally{btn.disabled=false;}
+};
+async function makeBackupFile(){
+  const records=await getAll();
+  const payload={format:'flight-records-backup',version:1,exportedAt:new Date().toISOString(),records};
+  return new File([JSON.stringify(payload)],'FlightRecordsBackup.json',{type:'application/json'});
+}
+$('shareBackupBtn').onclick=async()=>{
+  const btn=$('shareBackupBtn');btn.disabled=true;
+  $('backupStatus').textContent='Preparing current records and photos for sharing…';
+  try{
+    const file=await makeBackupFile();
+    if(!navigator.share || (navigator.canShare && !navigator.canShare({files:[file]}))){
+      $('backupStatus').textContent='Direct file sharing is unavailable here. Use Export all records and share the downloaded file from Files.';
+      return;
+    }
+    await navigator.share({files:[file]});
+    $('backupStatus').textContent='File handed to the Share Sheet. Check that your Shortcut saved FlightRecordsBackup.json in Files.';
+  }catch(err){
+    if(err && err.name==='AbortError'){$('backupStatus').textContent='Sharing cancelled. No backup was confirmed.';}
+    else{console.error(err);$('backupStatus').textContent='Unable to share the backup from this app. Use Export all records instead.';}
+  }finally{btn.disabled=false;}
 };
 $('exportBtn').onclick=async()=>{const b=$('exportBtn');b.disabled=true;$('backupStatus').textContent='Preparing backup…';try{const records=await getAll();const payload={format:'flight-records-backup',version:1,exportedAt:new Date().toISOString(),records};const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='flight-records-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);$('backupStatus').textContent=`Backup prepared (${records.length} records). Save the downloaded file somewhere outside this app.`;}catch(err){console.error(err);$('backupStatus').textContent='Backup failed. Check available device storage and try again.';}finally{b.disabled=false;}};
 $('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(!confirm('Restore replaces the records currently in this app with the backup file. Export a backup of current records first. Continue?')){e.target.value='';return;}try{const payload=JSON.parse(await file.text());if(payload.format!=='flight-records-backup'||!Array.isArray(payload.records))throw Error('Not a valid Flight Records backup');if(!payload.records.every(r=>r&&typeof r.id==='string'&&(r.type==='student')))throw Error('Backup contents are not valid');await replaceAll(payload.records);activeStudentId=null;showHome();await refresh();$('backupStatus').textContent=`Restored ${payload.records.length} student record(s).`; }catch(err){alert('Could not restore this backup: '+err.message);}finally{e.target.value='';}};
