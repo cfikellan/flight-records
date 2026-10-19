@@ -39,6 +39,16 @@ textarea{min-height:88px;resize:vertical}.field{flex:1;min-width:180px}
 .lesson-badge.flight{background:#e7f1fb;color:#195782}
 .lesson-badge.ground{background:#e6f5ed;color:#176342}
 .lesson-badge.uncategorized{background:#edf0f3;color:#526170}
+/* Accessible, large tap-target Flight/Ground selector */
+.type-fieldset{border:0;padding:0;margin:0 0 15px;min-width:0}
+.type-fieldset legend{font-size:13px;color:#40536a;font-weight:650;margin-bottom:8px}
+.type-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.type-option{display:block;position:relative;margin:0;cursor:pointer}
+.type-option input{position:absolute;opacity:0;width:1px;height:1px;left:50%;top:50%}
+.type-option span{display:flex;align-items:center;justify-content:center;min-height:52px;border:2px solid #cbd6e1;border-radius:12px;background:#f8fafc;color:#40536a;font-size:16px;font-weight:750;transition:background .12s,border-color .12s}
+.flight-choice input:checked+span{border-color:#2869a1;background:#e7f1fb;color:#195782}
+.ground-choice input:checked+span{border-color:#25805c;background:#e6f5ed;color:#176342}
+.type-option input:focus-visible+span{outline:3px solid #d99a25;outline-offset:2px}
 .lesson img{width:100%;max-height:360px;object-fit:contain;background:#f0f3f6;border-radius:8px;margin-top:10px}
 .lesson-meta{font-size:13px;color:var(--muted);margin:3px 0 8px}
 .back{margin-bottom:12px}.divider{height:1px;background:var(--line);margin:16px 0}
@@ -95,8 +105,13 @@ footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font
   <div class="panel">
     <h2>Add lesson record</h2>
     <form id="lessonForm">
-      <label for="lessonType">Record type *</label>
-      <select id="lessonType" required><option value="" disabled selected>Choose Flight or Ground</option><option value="flight">✈ Flight</option><option value="ground">▤ Ground</option></select>
+      <fieldset class="type-fieldset">
+        <legend>Record type *</legend>
+        <div class="type-options">
+          <label class="type-option flight-choice"><input type="radio" name="lessonType" value="flight" required><span>✈ Flight</span></label>
+          <label class="type-option ground-choice"><input type="radio" name="lessonType" value="ground" required><span>▤ Ground</span></label>
+        </div>
+      </fieldset>
       <div class="row">
         <div class="field"><label for="lessonDate">Date *</label><input type="date" id="lessonDate" required></div>
         <div class="field"><label for="lessonTitle">Lesson / topic</label><input id="lessonTitle" maxlength="160" placeholder="e.g. Slow flight and stalls"></div>
@@ -142,7 +157,7 @@ $('cancelEditStudent').onclick=()=>$('editStudentPanel').classList.add('hidden')
 $('editStudentForm').onsubmit=async e=>{e.preventDefault();const all=await getAll(),s=all.find(r=>r.id===activeStudentId);if(!s)return;s.name=$('editName').value.trim();s.notes=$('editNotes').value.trim();await put(s);$('editStudentPanel').classList.add('hidden');await refresh();};
 $('deleteStudentBtn').onclick=async()=>{if(!confirm('Delete this student and ALL their lesson records and photos? This cannot be undone unless you have a backup.'))return;await remove(activeStudentId);showHome();await refresh();};
 $('lessonSearch').oninput=renderStudent;
-$('lessonForm').onsubmit=async e=>{e.preventDefault();const btn=$('saveLessonBtn');btn.disabled=true;$('lessonStatus').textContent='Saving…';try{const all=await getAll(),s=all.find(r=>r.id===activeStudentId);if(!s)throw Error('Student not found');const files=[...$('lessonPhoto').files];const photos=[];for(const f of files){if(!f.type.startsWith('image/'))continue;photos.push({name:f.name||'progress-sheet',type:f.type,dataUrl:await dataUrl(f)});}const lesson={id:uid(),lessonType:$('lessonType').value,date:$('lessonDate').value,title:$('lessonTitle').value.trim(),notes:$('lessonNotes').value.trim(),photos,createdAt:Date.now()};s.lessons=s.lessons||[];s.lessons.push(lesson);await put(s);$('lessonForm').reset();$('lessonDate').value=new Date().toISOString().slice(0,10);$('lessonStatus').textContent='Lesson saved on this device.';await refresh();}catch(err){console.error(err);$('lessonStatus').textContent='Could not save. Try fewer/smaller photos, then export a backup.';}finally{btn.disabled=false;}};
+$('lessonForm').onsubmit=async e=>{e.preventDefault();const btn=$('saveLessonBtn');btn.disabled=true;$('lessonStatus').textContent='Saving…';try{const all=await getAll(),s=all.find(r=>r.id===activeStudentId);if(!s)throw Error('Student not found');const files=[...$('lessonPhoto').files];const photos=[];for(const f of files){if(!f.type.startsWith('image/'))continue;photos.push({name:f.name||'progress-sheet',type:f.type,dataUrl:await dataUrl(f)});}const lesson={id:uid(),lessonType:document.querySelector('input[name="lessonType"]:checked').value,date:$('lessonDate').value,title:$('lessonTitle').value.trim(),notes:$('lessonNotes').value.trim(),photos,createdAt:Date.now()};s.lessons=s.lessons||[];s.lessons.push(lesson);await put(s);$('lessonForm').reset();$('lessonDate').value=new Date().toISOString().slice(0,10);$('lessonStatus').textContent='Lesson saved on this device.';await refresh();}catch(err){console.error(err);$('lessonStatus').textContent='Could not save. Try fewer/smaller photos, then export a backup.';}finally{btn.disabled=false;}};
 $('exportBtn').onclick=async()=>{const b=$('exportBtn');b.disabled=true;$('backupStatus').textContent='Preparing backup…';try{const records=await getAll();const payload={format:'flight-records-backup',version:1,exportedAt:new Date().toISOString(),records};const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='flight-records-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);$('backupStatus').textContent=`Backup prepared (${records.length} records). Save the downloaded file somewhere outside this app.`;}catch(err){console.error(err);$('backupStatus').textContent='Backup failed. Check available device storage and try again.';}finally{b.disabled=false;}};
 $('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(!confirm('Restore replaces the records currently in this app with the backup file. Export a backup of current records first. Continue?')){e.target.value='';return;}try{const payload=JSON.parse(await file.text());if(payload.format!=='flight-records-backup'||!Array.isArray(payload.records))throw Error('Not a valid Flight Records backup');if(!payload.records.every(r=>r&&typeof r.id==='string'&&(r.type==='student')))throw Error('Backup contents are not valid');await replaceAll(payload.records);activeStudentId=null;showHome();await refresh();$('backupStatus').textContent=`Restored ${payload.records.length} student record(s).`; }catch(err){alert('Could not restore this backup: '+err.message);}finally{e.target.value='';}};
 (async()=>{try{db=await openDB();await refresh();}catch(err){console.error(err);alert('This browser could not open local storage for Flight Records. Try opening it in Safari or Chrome with site storage enabled.');}})();
