@@ -86,8 +86,8 @@ footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font
           <button id="restoreShortcutBtn">↓ Restore Saved Backup</button>
         </div>
         <div id="shortcutRestorePanel" class="hidden" style="margin-top:12px">
-          <p class="muted">After the shortcut copies the backup, return here. The app will try to restore automatically. If iOS blocks clipboard access, tap the button below. This will replace your current records after confirmation.</p>
-          <button id="pasteRestoreBtn" class="secondary">Paste &amp; Restore Backup</button>
+          <p class="muted">After the shortcut copies your backup, return to Flight Records and tap Complete Restore. You will be asked to confirm before replacing current records.</p>
+          <button id="pasteRestoreBtn" class="secondary">Complete Restore</button>
           <p class="muted">If clipboard access is blocked, use Restore Different File instead.</p>
         </div>
       </div>
@@ -104,7 +104,7 @@ footer{max-width:900px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font
     <div id="backupStatus" class="status" role="status"></div>
     <div class="divider"></div>
     <h3>How it works</h3>
-    <p class="muted">Save Backup opens the Share Sheet: choose “Save Flight Records Backup.” Restore Saved Backup launches a separate shortcut named “Restore Flight Records,” which must be configured to copy your backup JSON to the clipboard. Return to this app; it will attempt restoration automatically. If iOS blocks it, tap Paste &amp; Restore Backup. You can always restore a different file manually. Keep a separate recovery copy when possible.</p>
+    <p class="muted">Save Backup opens the Share Sheet: choose “Save Flight Records Backup.” Restore Saved Backup launches a separate shortcut named “Restore Flight Records,” which must be configured to copy your backup JSON to the clipboard. Return to Flight Records and tap Complete Restore to confirm the restoration. You can always restore a different file manually. Keep a separate recovery copy when possible.</p>
   </div>
   <div id="addStudentPanel" class="panel hidden">
     <h2>Add student</h2>
@@ -170,6 +170,7 @@ const DB_NAME='flight-records-local-v1', DB_VERSION=1, STORE='records';
 let db, activeStudentId=null, studentsCache=[], pendingPhotos=[];
 const $=id=>document.getElementById(id);
 const uid=()=>Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+const localToday=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate=s=>{if(!s)return '';const d=new Date(s+'T12:00:00');return d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});};
 function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE,{keyPath:'id'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
@@ -180,7 +181,7 @@ function replaceAll(records){return new Promise((resolve,reject)=>{const tx=db.t
 async function refresh(){studentsCache=(await getAll()).filter(r=>r.type==='student').sort((a,b)=>a.name.localeCompare(b.name));renderStudents();if(activeStudentId)await renderStudent();}
 function renderStudents(){const q=$('studentSearch').value.trim().toLowerCase();const items=studentsCache.filter(s=>(s.name+' '+(s.notes||'')).toLowerCase().includes(q));$('studentList').innerHTML=items.map(s=>`<button class="student-card" data-student="${esc(s.id)}"><strong>${esc(s.name)}</strong><small>${(s.lessons||[]).length} lesson record${(s.lessons||[]).length===1?'':'s'}</small></button>`).join('');$('noStudents').classList.toggle('hidden',studentsCache.length!==0);$('studentList').querySelectorAll('[data-student]').forEach(b=>b.addEventListener('click',()=>openStudent(b.dataset.student)));}
 function showHome(){activeStudentId=null;$('homeView').classList.remove('hidden');$('studentView').classList.add('hidden');$('homeBtn').classList.add('hidden');}
-async function openStudent(id){activeStudentId=id;$('homeView').classList.add('hidden');$('studentView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');$('editStudentPanel').classList.add('hidden');$('lessonSearch').value='';$('lessonForm').reset();clearPendingPhotos();$('lessonDate').value=new Date().toISOString().slice(0,10);$('lessonStatus').textContent='';await renderStudent();window.scrollTo(0,0);}
+async function openStudent(id){activeStudentId=id;$('homeView').classList.add('hidden');$('studentView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');$('editStudentPanel').classList.add('hidden');$('lessonSearch').value='';$('lessonForm').reset();clearPendingPhotos();$('lessonDate').value=localToday();$('lessonStatus').textContent='';await renderStudent();window.scrollTo(0,0);}
 async function renderStudent(){
   const s=(await getAll()).find(r=>r.id===activeStudentId&&r.type==='student');
   if(!s){showHome();return;}
@@ -311,7 +312,7 @@ $('lessonForm').onsubmit=async e=>{
     const lesson={id:uid(),lessonType:selectedType.value,date:$('lessonDate').value,title:$('lessonTitle').value.trim(),notes:$('lessonNotes').value.trim(),photos:pendingPhotos.map(p=>({...p})),createdAt:Date.now()};
     s.lessons=s.lessons||[];s.lessons.push(lesson);
     await put(s);
-    $('lessonForm').reset();clearPendingPhotos();$('lessonDate').value=new Date().toISOString().slice(0,10);
+    $('lessonForm').reset();clearPendingPhotos();$('lessonDate').value=localToday();
     $('lessonStatus').textContent='Lesson saved on this device.';await refresh();
   }catch(err){console.error(err);$('lessonStatus').textContent='Could not save. Check available storage or try fewer/smaller photos.';}
   finally{btn.disabled=false;}
@@ -337,7 +338,7 @@ $('shareBackupBtn').onclick=async()=>{
     else{console.error(err);$('backupStatus').textContent='Unable to share the backup from this app. Use Export all records instead.';}
   }finally{btn.disabled=false;}
 };
-$('exportBtn').onclick=async()=>{const b=$('exportBtn');b.disabled=true;$('backupStatus').textContent='Preparing backup…';try{const records=await getAll();const payload={format:'flight-records-backup',version:1,exportedAt:new Date().toISOString(),records};const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='flight-records-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);$('backupStatus').textContent=`Backup prepared (${records.length} records). Save the downloaded file somewhere outside this app.`;}catch(err){console.error(err);$('backupStatus').textContent='Backup failed. Check available device storage and try again.';}finally{b.disabled=false;}};
+$('exportBtn').onclick=async()=>{const b=$('exportBtn');b.disabled=true;$('backupStatus').textContent='Preparing backup…';try{const records=await getAll();const payload={format:'flight-records-backup',version:1,exportedAt:new Date().toISOString(),records};const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='flight-records-backup-'+localToday()+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);$('backupStatus').textContent=`Backup prepared (${records.length} records). Save the downloaded file somewhere outside this app.`;}catch(err){console.error(err);$('backupStatus').textContent='Backup failed. Check available device storage and try again.';}finally{b.disabled=false;}};
 async function restoreBackupText(raw){
   const payload=JSON.parse(raw);
   if(payload.format!=='flight-records-backup'||!Array.isArray(payload.records))throw Error('Not a valid Flight Records backup');
@@ -347,39 +348,24 @@ async function restoreBackupText(raw){
   $('backupStatus').textContent=`Restored ${payload.records.length} student record(s).`;
   return true;
 }
-let shortcutRestorePending=false, shortcutRestoreReading=false;
 $('restoreShortcutBtn').onclick=()=>{
-  shortcutRestorePending=true;
   $('shortcutRestorePanel').classList.remove('hidden');
-  $('backupStatus').textContent='Opening Restore Flight Records in Shortcuts. Return here after it copies the backup. The app will try to restore automatically; if blocked, tap Paste & Restore Backup.';
+  $('backupStatus').textContent='Opening Restore Flight Records in Shortcuts. Return to this app and tap Complete Restore.';
   window.location.href='shortcuts://run-shortcut?name='+encodeURIComponent('Restore Flight Records');
 };
-async function tryClipboardRestore(automatic=false){
-  if(shortcutRestoreReading)return;
-  shortcutRestoreReading=true;
+$('pasteRestoreBtn').onclick=async()=>{
+  const btn=$('pasteRestoreBtn');btn.disabled=true;
   try{
-    if(!navigator.clipboard?.readText)throw Error('Clipboard access is unavailable');
+    if(!navigator.clipboard || !navigator.clipboard.readText)throw Error('Clipboard reading is unavailable');
     const raw=await navigator.clipboard.readText();
     if(!raw.trim())throw Error('Clipboard is empty');
     const restored=await restoreBackupText(raw);
-    if(restored){shortcutRestorePending=false;$('shortcutRestorePanel').classList.add('hidden');}
-    else if(automatic){$('backupStatus').textContent='Restore cancelled. Use Paste & Restore Backup if you want to try again.';}
+    if(restored)$('shortcutRestorePanel').classList.add('hidden');
   }catch(err){
     console.error('Clipboard restore:',err);
-    $('shortcutRestorePanel').classList.remove('hidden');
-    $('backupStatus').textContent=(automatic?'Automatic clipboard access was blocked. Tap Paste & Restore Backup to finish. ':'Could not read or restore clipboard: ')+err.message;
-  }finally{shortcutRestoreReading=false;}
-}
-$('pasteRestoreBtn').onclick=()=>tryClipboardRestore(false);
-// Only attempt a clipboard read after this app explicitly launched the restore shortcut.
-// iOS may require a user gesture; the manual button remains available.
-function attemptRestoreOnReturn(){
-  if(!shortcutRestorePending||document.hidden||shortcutRestoreReading)return;
-  // Allow iOS a moment to bring the installed web app back into the foreground.
-  setTimeout(()=>{if(shortcutRestorePending&&!document.hidden)tryClipboardRestore(true);},350);
-}
-document.addEventListener('visibilitychange',attemptRestoreOnReturn);
-window.addEventListener('focus',attemptRestoreOnReturn);
+    $('backupStatus').textContent='Could not restore clipboard backup: '+err.message+'. Use Restore Different File instead.';
+  }finally{btn.disabled=false;}
+};
 $('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(!confirm('Restore replaces the records currently in this app with the backup file. Export a backup of current records first. Continue?')){e.target.value='';return;}try{const payload=JSON.parse(await file.text());if(payload.format!=='flight-records-backup'||!Array.isArray(payload.records))throw Error('Not a valid Flight Records backup');if(!payload.records.every(r=>r&&typeof r.id==='string'&&(r.type==='student')))throw Error('Backup contents are not valid');await replaceAll(payload.records);activeStudentId=null;showHome();await refresh();$('backupStatus').textContent=`Restored ${payload.records.length} student record(s).`; }catch(err){alert('Could not restore this backup: '+err.message);}finally{e.target.value='';}};
 (async()=>{try{db=await openDB();await refresh();}catch(err){console.error(err);alert('This browser could not open local storage for Flight Records. Try opening it in Safari or Chrome with site storage enabled.');}})();
 })();
